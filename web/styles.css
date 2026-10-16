@@ -1,0 +1,170 @@
+:root {
+  --bg: #16120c;
+  --bg-raise: #1e1912;
+  --ink: #f4ead7;
+  --muted: #9a8b72;
+  --line: #3a3124;
+  --gold: #e3b341;
+  --gold-dim: #8a6b22;
+  --row: #1a1610;
+  --row-alt: #201b14;
+  --select: #3a2d12;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.4 "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+}
+
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 8px;
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff6d6 0%, var(--gold) 38%, #6a4d10 100%);
+  box-shadow: 0 0 24px rgba(227, 179, 65, 0.35);
+}
+
+.name {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tag,
+.hidden-toggle,
+.status,
+.empty {
+  color: var(--muted);
+}
+
+.tag {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.hidden-toggle {
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search-wrap {
+  padding: 8px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+#q {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: 28px/1.2 "Iowan Old Style", Palatino, serif;
+  caret-color: var(--gold);
+}
+
+#q::placeholder {
+  color: #5c5346;
+}
+
+.table-wrap {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 7px 12px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-raise);
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+tbody tr {
+  background: var(--row);
+  cursor: default;
+}
+
+tbody tr:nth-child(even) {
+  background: var(--row-alt);
+}
+
+tbody tr.selected,
+tbody tr:hover {
+  background: var(--select);
+}
+
+.col-name { width: 28%; }
+.col-path { width: 46%; color: var(--muted); }
+.col-size { width: 10%; font-variant-numeric: tabular-nums; }
+.col-date { width: 16%; font-variant-numeric: tabular-nums; }
+
+.empty {
+  display: none;
+  margin: 48px 20px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.empty.visible {
+  display: block;
+}
+
+.status {
+  display: flex;
+  gap: 16px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+
+#timing {
+  color: var(--gold-dim);
+}

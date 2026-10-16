@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lumos</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <div>
+          <p class="name">Lumos</p>
+          <p class="tag">Find any file. Instantly.</p>
+        </div>
+      </div>
+      <label class="hidden-toggle">
+        <input type="checkbox" id="hidden">
+        Hidden files
+      </label>
+    </header>
+    <div class="search-wrap">
+      <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Search a name, ext:pdf, size:>10mb, dm:today">
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-name">Name</th>
+            <th class="col-path">Path</th>
+            <th class="col-size">Size</th>
+            <th class="col-date">Modified</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="empty" class="empty">Type to light up a file.</p>
+    </div>
+    <footer class="status">
+      <span id="counts">0 objects</span>
+      <span id="timing"></span>
+      <span id="message">Starting…</span>
+    </footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -157,7 +157,7 @@ Lumos does **not** store:
 
 Those stay in RAM for the session and are dropped on quit. Recents that NSOpenPanel might write are cleared. macOS recents databases (`com.apple.sharedfilelist`, `*.sfl*`) are never added to the index.
 
-The old Everything catalog at `~/Library/Application Support/Everything/` is unused. The SQLite index from earlier Lumos versions (`index.sqlite`) is deleted automatically on first launch.
+The old Everything catalog at `~/Library/Application Support/Everything/` is unused.
 
 ## License
 

@@ -94,7 +94,7 @@ func snapshotSuite() -> TestSuite {
         try writeFile(at: root.appendingPathComponent("existing/start.txt"), contents: "s")
         func count(_ service: IndexService, _ query: String) -> Int {
             return service.store.read { data in
-                searchIndex(data, query: parseQuery(query), showHidden: true, sortColumn: .name, ascending: true).count
+                searchIndex(data, query: parseQuery(query), showHidden: true, sortColumn: .name, ascending: true, trigrams: nil).count
             }
         }
         let first = IndexService(folder: home, roots: [root.path])

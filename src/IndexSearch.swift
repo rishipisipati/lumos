@@ -46,15 +46,18 @@ func compileQuery(_ query: SearchQuery, showHidden: Bool) -> CompiledQuery {
     )
 }
 
+/// `trigrams` must have been built from this `data`'s layout (see
+/// `IndexStore.readForSearch`), or be nil for a plain scan.
 func searchIndex(
     _ data: IndexData,
     query: SearchQuery,
     showHidden: Bool,
     sortColumn: SortColumn,
-    ascending: Bool
+    ascending: Bool,
+    trigrams: NameTrigramIndex?
 ) -> [Int32] {
     let compiled = compileQuery(query, showHidden: showHidden)
-    let ids = matchingIds(data, query: compiled)
+    let ids = matchingIds(data, query: compiled, trigrams: trigrams)
     return sortIds(ids, data: data, column: sortColumn, ascending: ascending)
 }
 
@@ -473,11 +476,20 @@ private func entryMatches(
     return true
 }
 
-func matchingIds(_ data: IndexData, query: CompiledQuery) -> [Int32] {
+/// Ids matching `query`, ascending. With trigrams, only the candidates below
+/// `coveredCount` plus every id appended since the build are checked.
+func matchingIds(_ data: IndexData, query: CompiledQuery, trigrams: NameTrigramIndex?) -> [Int32] {
     let count = data.count
     if count == 0 {
         return []
     }
+    var candidates: [Int32] = []
+    var covered = 0
+    if let trigrams, trigrams.coveredCount <= count, let found = trigramCandidates(trigrams, query: query) {
+        candidates = found
+        covered = trigrams.coveredCount
+    }
+    let total = candidates.count + (count - covered)
     let arena = MatchArena()
     let program = makeMatchProgram(query, arena: arena)
     let pathScratchSize = (query.pathTerm?.count ?? 0) * 2 + 2
@@ -495,22 +507,29 @@ func matchingIds(_ data: IndexData, query: CompiledQuery) -> [Int32] {
                                 pathStart: pathStart,
                                 pathLength: pathLength
                             )
-                            return scanChunks(count: count) { low, high, output in
-                                let globScratch = UnsafeMutablePointer<CChar>.allocate(capacity: Int(UInt16.max) + 1)
-                                let pathScratch = UnsafeMutablePointer<UInt8>.allocate(capacity: pathScratchSize)
-                                defer {
-                                    globScratch.deallocate()
-                                    pathScratch.deallocate()
-                                }
-                                for index in low..<high where entryMatches(
-                                    index: index,
-                                    view: view,
-                                    program: program,
-                                    pathTable: tableView,
-                                    globScratch: globScratch,
-                                    pathScratch: pathScratch
-                                ) {
-                                    output.append(Int32(index))
+                            return candidates.withUnsafeBufferPointer { candidateIds in
+                                scanChunks(count: total) { low, high, output in
+                                    let globScratch = UnsafeMutablePointer<CChar>.allocate(capacity: Int(UInt16.max) + 1)
+                                    let pathScratch = UnsafeMutablePointer<UInt8>.allocate(capacity: pathScratchSize)
+                                    defer {
+                                        globScratch.deallocate()
+                                        pathScratch.deallocate()
+                                    }
+                                    for position in low..<high {
+                                        let index = position < candidateIds.count
+                                            ? Int(candidateIds[position])
+                                            : covered + (position - candidateIds.count)
+                                        if entryMatches(
+                                            index: index,
+                                            view: view,
+                                            program: program,
+                                            pathTable: tableView,
+                                            globScratch: globScratch,
+                                            pathScratch: pathScratch
+                                        ) {
+                                            output.append(Int32(index))
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -74,7 +74,7 @@ func searchSuite() -> TestSuite {
     suite.test("sort by size, date and path") {
         let data = try sample()
         func sorted(_ column: SortColumn, _ ascending: Bool) -> [String] {
-            return searchIndex(data, query: parseQuery("file:"), showHidden: false, sortColumn: column, ascending: ascending)
+            return searchIndex(data, query: parseQuery("file:"), showHidden: false, sortColumn: column, ascending: ascending, trigrams: nil)
                 .map { data.nameString($0) }
         }
         try expectEqual(sorted(.size, false), ["alpha.pdf", "Caf\u{00E9} menu.txt", "notes.PDF"], "size desc")
@@ -93,7 +93,7 @@ func searchSuite() -> TestSuite {
         entries.append(testFile("/r/d/report", size: 0, modified: 0))
         entries.append(testFile("/r/d/Report-0000", size: 0, modified: 0))
         let data = try buildTestIndex(rootPath: "/r", entries: entries)
-        let ids = searchIndex(data, query: parseQuery("report"), showHidden: true, sortColumn: .name, ascending: true)
+        let ids = searchIndex(data, query: parseQuery("report"), showHidden: true, sortColumn: .name, ascending: true, trigrams: nil)
         let names = ids.map { data.nameString($0) }
         let reference = names.sorted { left, right in
             let l = foldedBytes(left)
@@ -102,7 +102,7 @@ func searchSuite() -> TestSuite {
         }
         try expectEqual(names.count, 5002, "all matched")
         try expect(names == reference, "radix order equals reference order")
-        let descending = searchIndex(data, query: parseQuery("report"), showHidden: true, sortColumn: .name, ascending: false)
+        let descending = searchIndex(data, query: parseQuery("report"), showHidden: true, sortColumn: .name, ascending: false, trigrams: nil)
         try expect(descending == ids.reversed(), "descending is reversed")
     }
 

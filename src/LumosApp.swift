@@ -67,6 +67,7 @@ struct LumosApp: App {
             CommandMenu("View") {
                 Toggle("Show Hidden Files", isOn: $store.showHidden)
                     .keyboardShortcut("h", modifiers: [.command, .shift])
+                Toggle("Option-Space Shows Lumos", isOn: $store.globalShortcutEnabled)
             }
             CommandGroup(replacing: .help) {
                 Button("Lumos Search Syntax") {

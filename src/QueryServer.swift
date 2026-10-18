@@ -34,7 +34,7 @@ enum QueryServerError: Error, LocalizedError {
 
 /// Runs a find against one consistent view of the index. Paths are built only
 /// for the returned window.
-func executeFind(_ data: IndexData, request: FindRequest) throws -> (total: Int, entries: [FoundEntry]) {
+func executeFind(_ data: IndexData, request: FindRequest, trigrams: NameTrigramIndex?) throws -> (total: Int, entries: [FoundEntry]) {
     if request.limit < 0 || request.offset < 0 {
         throw FindError.invalidWindow("limit and offset must not be negative")
     }
@@ -52,7 +52,8 @@ func executeFind(_ data: IndexData, request: FindRequest) throws -> (total: Int,
         query: parseQuery(request.query + kindFilter),
         showHidden: request.includeHidden,
         sortColumn: sortColumn(for: request.sort),
-        ascending: !request.descending
+        ascending: !request.descending,
+        trigrams: trigrams
     )
     let scoped: [Int32]
     if request.within.isEmpty {
@@ -176,7 +177,9 @@ func handleQueryRequest(
         let exact = service.waitUntilExact(seconds: find.waitSeconds)
         let started = DispatchTime.now()
         do {
-            let found = try service.store.read { try executeFind($0, request: find) }
+            let found = try service.store.readForSearch { data, _, trigrams in
+                try executeFind(data, request: find, trigrams: trigrams)
+            }
             let elapsed = Int((DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000)
             return .found(FindResult(
                 total: found.total,

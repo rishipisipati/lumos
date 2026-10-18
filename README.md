@@ -11,11 +11,11 @@ Finding a file on a Mac is slower than it should be.
 - **Spotlight shows results you never asked for.** A search for one document comes back mixed with apps, web and Siri suggestions, mail, messages, and contacts. Lumos shows only files and folders from the folders you chose to index, sorted the way you ask.
 - **Spotlight is slow to index.** It reads the contents of files, so after a fresh install or a large copy it can take hours before files show up, and nothing tells you whether a missing result means "not there" or "not indexed yet". Lumos indexes names only: about 1.1 million files in roughly 5 seconds on an M1 Pro, live updates after that, and every answer says whether the index is exact.
 
-Measured on a real home folder (about 420,000 files, M1 Pro):
+Measured on a real home folder (about 415,000 files, M1 Pro):
 
-- `lumos` answered name searches in 30–100 ms. `find` took 5–8 seconds for the same answers, and `ls -R` over the whole home folder was still running after 2 minutes.
+- `lumos` answered most name searches in 30–60 ms. `find` took 5–10 seconds for the same answers, and `ls -R` over the whole home folder was still running after 2 minutes.
 - A file created a moment before the search was found by `lumos` and missed by Spotlight (`mdfind`).
-- Spotlight found 1,590 of 3,514 files with "readme" in the name, because it skips or delays some folders. It did as well as Lumos on documents that had been sitting in Downloads for months.
+- Spotlight found 1,468 of 3,497 files with "readme" in the name, because it skips or delays some folders. It did as well as Lumos on documents that had been sitting in Downloads for months.
 
 Lumos is also a fast file finder for AI agents. See [LLM_USES.md](LLM_USES.md) for workflows and the full comparison.
 
@@ -26,7 +26,7 @@ make test
 make run
 ```
 
-Requires macOS 14+, Apple Silicon, and the Xcode Command Line Tools. `make test` compiles a command-line suite under `tests/` (query parser, formatters, privacy skips, in-memory index, search and sorting, directory scanner and diffs, snapshot integrity, live indexing and journal replay, the query socket used by `lumos`, and special-character queries). GitHub Actions runs the same target on `macos-14`.
+Requires macOS 14+, Apple Silicon, and the Xcode Command Line Tools. `make test` compiles a command-line suite under `tests/` (query parser, formatters, privacy skips, in-memory index, search and sorting, directory scanner and diffs, snapshot integrity, live indexing and journal replay, the query socket used by `lumos`, the trigram index matching a full scan, the MCP server, and special-character queries). GitHub Actions runs the same target on `macos-14`.
 
 The first launch scans your home folder and `/Applications` (skipping `Library`, `Pictures`, `Music`, and `Movies`). Later launches load `~/Library/Application Support/Lumos/index.lumos` in under a second and replay the macOS file system journal to pick up anything that changed while Lumos was closed.
 
@@ -34,6 +34,7 @@ The first launch scans your home folder and `/Applications` (skipping `Library`,
 
 | Action | How |
 | --- | --- |
+| Show or hide Lumos from any app | Option-Space (turn off in View → Option-Space Shows Lumos) |
 | Open | Double-click or Return |
 | Reveal in Finder | Double-click the Path column, or Command-Return |
 | Sort | Click a column header |
@@ -70,9 +71,24 @@ Example output:
 
 `lumos help` lists every option. `lumos status` shows which folders are indexed and who is serving them. `lumos stop` stops the background indexer. See [LLM_USES.md](LLM_USES.md) for concrete agent workflows.
 
+### MCP server
+
+`lumos mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio with two tools, `find_files` and `index_status`. The AI app starts it as a local process; nothing is hosted. Point the app at the installed CLI:
+
+```bash
+claude mcp add lumos -- ~/.local/bin/lumos mcp     # Claude Code
+```
+
+```json
+{ "mcpServers": { "lumos": { "command": "/Users/you/.local/bin/lumos", "args": ["mcp"] } } }
+```
+
+The JSON goes in `~/.cursor/mcp.json` for Cursor, or `~/Library/Application Support/Claude/claude_desktop_config.json` for Claude Desktop. MCP servers run outside agent shell sandboxes, so this also avoids the sandbox problem described in [LLM_USES.md](LLM_USES.md).
+
 ## How it works
 
-- **Index in memory.** File names are kept in compact arrays (under 100 bytes per file), and each query scans them in parallel across CPU cores. Searches over 1.5 million files typically take 10–90 ms. The status bar shows each query's time.
+- **Index in memory.** File names are kept in compact arrays (under 100 bytes per file), and each query scans them in parallel across CPU cores. The status bar shows each query's time.
+- **Trigram index.** A background-built index of every three-letter chunk of every name (about 80 more bytes per file) narrows a search to the few entries that can match. The normal matcher still checks each one, so results are identical to a full scan. On about 415,000 files, name searches dropped from 1–3 ms to 0.03–1 ms. Queries with no word of three or more letters, such as `a` or `dm:today`, use the full scan. Files added since the last build are scanned until the next background rebuild.
 - **Fast scanning.** Folders are read with `getattrlistbulk` on several threads. A cold scan of about 1.1 million files takes roughly 5 seconds on an M1 Pro.
 - **Live updates.** macOS FSEvents reports which folders changed, and Lumos re-reads only those folders. If events are dropped, the affected tree is re-checked.
 - **Saved snapshot.** The index is saved atomically to `index.lumos` (with a checksum) at most every 20 seconds and on quit. A missing or corrupt snapshot triggers a rescan instead of showing wrong results.
@@ -130,7 +146,7 @@ On disk, only a filename catalog:
 | Same folder, `index.lock` | Process id of the running Lumos, so two copies never index at once. |
 | Same folder, `lumos.sock` and `barrier/` | The query socket for `lumos` (exists only while Lumos runs) and empty marker files used to confirm answers are exact. |
 | Same folder, `daemon.log` | Start and stop messages from the background indexer. Never queries or results. |
-| UserDefaults | Folders you chose to index, and the search delay setting. |
+| UserDefaults | Folders you chose to index, the search delay setting, and whether Option-Space is on. |
 
 Lumos does **not** store:
 

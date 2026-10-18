@@ -43,16 +43,16 @@ struct IndexerMain {
                 print(describe(service.status(), idle: service.isIdle()))
             case "count":
                 let started = DispatchTime.now()
-                let ids = service.store.read { data in
-                    searchIndex(data, query: parseQuery(argument), showHidden: true, sortColumn: .name, ascending: true)
+                let ids = service.store.readForSearch { data, _, trigrams in
+                    searchIndex(data, query: parseQuery(argument), showHidden: true, sortColumn: .name, ascending: true, trigrams: trigrams)
                 }
                 print("count \(ids.count) \(elapsedMs(started))")
             case "list":
                 let parts = argument.split(separator: " ", maxSplits: 1).map(String.init)
                 let limit = Int(parts.first ?? "") ?? 10
                 let query = parts.count > 1 ? parts[1] : ""
-                let paths = service.store.read { data -> [String] in
-                    let ids = searchIndex(data, query: parseQuery(query), showHidden: true, sortColumn: .name, ascending: true)
+                let paths = service.store.readForSearch { data, _, trigrams -> [String] in
+                    let ids = searchIndex(data, query: parseQuery(query), showHidden: true, sortColumn: .name, ascending: true, trigrams: trigrams)
                     return ids.prefix(limit).map { data.fullPath($0) }
                 }
                 for path in paths {

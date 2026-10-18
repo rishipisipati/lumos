@@ -7,15 +7,18 @@ RESOURCES := $(APP)/Contents/Resources
 # Separate from MacOS/: `lumos` and `Lumos` collide on case-insensitive volumes.
 HELPERS := $(APP)/Contents/Helpers
 ENGINE_SRC := src/FileRecord.swift src/Formatters.swift src/Privacy.swift src/QueryParser.swift \
-	src/IndexData.swift src/IndexSearch.swift src/IndexStore.swift src/IndexSnapshot.swift \
+	src/IndexData.swift src/IndexSearch.swift src/NameTrigrams.swift src/IndexStore.swift src/IndexSnapshot.swift \
 	src/DirectoryScanner.swift src/FileWatcher.swift src/IndexService.swift \
 	src/QueryProtocol.swift src/QueryServer.swift
 INDEXER_SRC := $(ENGINE_SRC) src/IndexerMain.swift
-CLIENT_SRC := src/QueryProtocol.swift src/Formatters.swift src/LumosCLI.swift
-APP_SRC := $(ENGINE_SRC) src/LumosApp.swift src/AppStore.swift src/ContentView.swift src/ResultsTableView.swift
+CLIENT_SRC := src/QueryProtocol.swift src/Formatters.swift src/ClientSupport.swift src/LumosMCP.swift src/LumosCLI.swift
+APP_SRC := $(ENGINE_SRC) src/LumosApp.swift src/AppStore.swift src/ContentView.swift src/ResultsTableView.swift src/GlobalHotKey.swift
 TEST_SRC := tests/TestHarness.swift tests/TestSupport.swift tests/QueryParserTests.swift tests/FormatterTests.swift \
 	tests/PrivacyTests.swift tests/IndexDataTests.swift tests/SearchTests.swift tests/ScannerTests.swift \
-	tests/SnapshotTests.swift tests/SpecialCharacterTests.swift tests/QueryTests.swift
+	tests/SnapshotTests.swift tests/SpecialCharacterTests.swift tests/QueryTests.swift tests/TrigramTests.swift \
+	tests/MCPTests.swift
+# Client code the tests exercise without the CLI's @main.
+TEST_CLIENT_SRC := src/ClientSupport.swift src/LumosMCP.swift
 BINDIR := $(HOME)/.local/bin
 
 .PHONY: all run app test clean icon cli install-cli
@@ -57,6 +60,7 @@ $(APP)/Contents/MacOS/Lumos: $(APP_SRC)
 		-target $(TARGET) \
 		-sdk $(SDK) \
 		-framework AppKit \
+		-framework Carbon \
 		-framework SwiftUI \
 		-framework Foundation \
 		-framework CoreServices \
@@ -99,7 +103,7 @@ test:
 		-framework Foundation \
 		-framework CoreServices \
 		-o build/lumos-tests \
-		$(TEST_SRC) $(ENGINE_SRC)
+		$(TEST_SRC) $(ENGINE_SRC) $(TEST_CLIENT_SRC)
 	./build/lumos-tests
 
 clean:

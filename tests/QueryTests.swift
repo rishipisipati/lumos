@@ -40,38 +40,38 @@ func querySuite() -> TestSuite {
 
     suite.test("total, paging and kinds") {
         let data = try sample()
-        let all = try executeFind(data, request: request("engagement letter", limit: 50, offset: 0, sort: .path, descending: false, within: [], kind: .any))
+        let all = try executeFind(data, request: request("engagement letter", limit: 50, offset: 0, sort: .path, descending: false, within: [], kind: .any), trigrams: nil)
         try expectEqual(all.total, 3, "space-separated words are ANDed, so underscores and order don't matter")
-        let words = try executeFind(data, request: request("engagement", limit: 2, offset: 1, sort: .name, descending: false, within: [], kind: .any))
+        let words = try executeFind(data, request: request("engagement", limit: 2, offset: 1, sort: .name, descending: false, within: [], kind: .any), trigrams: nil)
         try expectEqual(words.total, 4, "hidden excluded")
         try expectEqual(words.entries.count, 2, "window size")
-        let folders = try executeFind(data, request: request("engagement", limit: 50, offset: 0, sort: .name, descending: false, within: [], kind: .folders))
+        let folders = try executeFind(data, request: request("engagement", limit: 50, offset: 0, sort: .name, descending: false, within: [], kind: .folders), trigrams: nil)
         try expectEqual(folders.entries.map(\.path), ["/r/Clients/Beta/Engagement"], "folders only")
         try expectEqual(folders.entries.map(\.kind), [.folder], "folder kind")
         var withPackage = data
         _ = try appendTestEntry(&withPackage, parent: data.roots[0].entryId, name: "Viewer.app", size: 0, modified: 0, flags: EntryFlag.directory | EntryFlag.opaque)
-        let packages = try executeFind(withPackage, request: request("viewer", limit: 50, offset: 0, sort: .name, descending: false, within: [], kind: .any))
+        let packages = try executeFind(withPackage, request: request("viewer", limit: 50, offset: 0, sort: .name, descending: false, within: [], kind: .any), trigrams: nil)
         try expectEqual(packages.entries.map(\.kind), [.package], "bundles report as packages")
     }
 
     suite.test("newest first and scoping") {
         let data = try sample()
-        let newest = try executeFind(data, request: request("engagement", limit: 50, offset: 0, sort: .modified, descending: true, within: [], kind: .files))
+        let newest = try executeFind(data, request: request("engagement", limit: 50, offset: 0, sort: .modified, descending: true, within: [], kind: .files), trigrams: nil)
         try expectEqual(
             newest.entries.map(\.path),
             ["/r/Clients/Acme/Engagement_Letter_v2.docx", "/r/Clients/Acme/engagement letter.pdf", "/r/Clients/Beta/engagement letter.pdf"],
             "modified descending"
         )
         try expectEqual(newest.entries.first?.modified, Date(timeIntervalSince1970: 500), "modified date")
-        let scoped = try executeFind(data, request: request("engagement", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients/Beta"], kind: .any))
+        let scoped = try executeFind(data, request: request("engagement", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients/Beta"], kind: .any), trigrams: nil)
         try expectEqual(scoped.entries.map(\.path), ["/r/Clients/Beta/Engagement", "/r/Clients/Beta/engagement letter.pdf"], "inside Beta only")
-        let empty = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients/Acme"], kind: .files))
+        let empty = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients/Acme"], kind: .files), trigrams: nil)
         try expectEqual(empty.total, 2, "empty query lists a folder")
-        let folders = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients"], kind: .folders))
+        let folders = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients"], kind: .folders), trigrams: nil)
         try expectEqual(folders.entries.map(\.path), ["/r/Clients/Acme", "/r/Clients/Beta", "/r/Clients/Beta/Engagement"], "scope folder is not its own result")
-        let nested = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients", "/r/Clients/Beta"], kind: .folders))
+        let nested = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients", "/r/Clients/Beta"], kind: .folders), trigrams: nil)
         try expectEqual(nested.total, 3, "a nested scope folder stays a result")
-        let file = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients/Beta/engagement letter.pdf"], kind: .any))
+        let file = try executeFind(data, request: request("", limit: 50, offset: 0, sort: .name, descending: false, within: ["/r/Clients/Beta/engagement letter.pdf"], kind: .any), trigrams: nil)
         try expectEqual(file.total, 1, "a scoped file matches itself")
     }
 
@@ -79,14 +79,14 @@ func querySuite() -> TestSuite {
         let data = try sample()
         var notIndexed = false
         do {
-            _ = try executeFind(data, request: request("x", limit: 1, offset: 0, sort: .name, descending: false, within: ["/r/Missing"], kind: .any))
+            _ = try executeFind(data, request: request("x", limit: 1, offset: 0, sort: .name, descending: false, within: ["/r/Missing"], kind: .any), trigrams: nil)
         } catch FindError.notIndexed(let path) {
             notIndexed = path == "/r/Missing"
         }
         try expect(notIndexed, "missing folder")
         var outside = false
         do {
-            _ = try executeFind(data, request: request("x", limit: 1, offset: 0, sort: .name, descending: false, within: ["/elsewhere"], kind: .any))
+            _ = try executeFind(data, request: request("x", limit: 1, offset: 0, sort: .name, descending: false, within: ["/elsewhere"], kind: .any), trigrams: nil)
         } catch FindError.outsideRoots(_, let roots) {
             outside = roots == ["/r"]
         }

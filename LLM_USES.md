@@ -10,18 +10,20 @@ Agents that work on a user's Mac (Claude Code, Cursor, Codex, and similar) spend
 
 ## Measured
 
-A real home folder with about 420,000 indexed files, on an M1 Pro. Every tool searched the same folders. `lumos` times are the median of 3 runs.
+A real home folder with about 415,000 indexed files, on an M1 Pro, with the trigram index. Every tool searched the same folders. `lumos` times are the median of 3 runs.
 
 | Search | `lumos` | `find` | `rg --files` | `mdfind` |
 | --- | --- | --- | --- | --- |
-| Names containing "readme" | 0.10 s, 3,514 | 8.0 s, 3,546 | 0.94 s, 3,536 | 0.20 s, **1,590** |
-| All PDFs | 0.04 s, 568 | 6.7 s, 574 | 0.96 s, 574 | 0.27 s, 584 |
-| Files modified today | 0.03 s, 36 | 6.7 s, 36 | can't filter by date | 0.32 s, 159 (includes other changes) |
-| A file created a moment earlier | 0.03 s, found | 4.8 s, found | not tested | 0.08 s, **missed** |
+| Names containing "readme" | 0.06 s, 3,497 | 10.1 s, 3,529 | 0.83 s, 3,523 | 0.34 s, **1,468** |
+| All PDFs | 0.04 s, 604 | 4.7 s, 610 | 0.72 s, 610 | 0.46 s, 567 |
+| Files modified today | 0.03 s, **161** | 4.6 s, 272 | can't filter by date | 0.34 s, 495 (includes other changes) |
+| A file created a moment earlier | 0.03 s, found | 4.6 s, found | not tested | 0.08 s, **missed** |
 
 - **Searching for "resume" documents:** `lumos` 0.23 s and `mdfind` 0.10 s found the same 55 documents. `ls -R` over the same folders took 5.0 s and found the same files. Over the whole home folder, `ls -R` was stopped after 2 minutes.
-- **Where the gaps came from:** every file `find` saw that `lumos` did not was inside a `.app` bundle, which Lumos skips on purpose. Nothing `lumos` returned was missing from `find`.
-- **Cold start:** with nothing running, the first `lumos` call started the background indexer from its saved index and answered in 0.3 s.
+- **Where the gaps came from:** for "readme" and PDFs, every file `find` saw that `lumos` did not was inside a `.app` bundle, which Lumos skips on purpose. In every row, nothing `lumos` returned was missing from `find`.
+- **Known bug in the "modified today" row:** 107 of the 111 files `lumos` missed were tool description files that Cursor had deleted and recreated under the same names. Lumos still listed them with the previous day's dates, while reporting `Index exact`. The other 4 were inside a `.app` bundle. A synthetic reproduction of the same pattern (live, during startup, and while no indexer ran) was handled correctly, so the cause is still being investigated.
+- **Cold start:** with nothing running, the first `lumos` call started the background indexer from its saved index and answered in 0.6 s. Through MCP, a handshake, tool list, search, and status took 0.18 s together, including starting the indexer.
+- **Engine time alone:** with the trigram index, name searches take 0.03–1 ms inside the engine on the same 415,000 files, against 1–3 ms for a full scan. Most of the times above are process start and the exactness check, not searching.
 
 ## When other tools are fine
 
@@ -33,11 +35,12 @@ Use `lumos` when the answer has to be complete and current: "does this exist", "
 
 ## What `lumos` gives an agent
 
-- **Milliseconds per query** over the whole indexed disk (30–100 ms in the tests below, against 5–8 s for `find`), so the agent can search freely instead of rationing calls.
+- **Milliseconds per query** over the whole indexed disk (30–60 ms for most searches in the tests above, against 5–10 s for `find`), so the agent can search freely instead of rationing calls.
 - **Small output.** 50 paths by default, with the total count and the next `--offset` in `#` lines. `--count` returns a single number.
 - **A trustworthy "no".** Each answer says `# Index exact` when every change on disk has been applied, so "no matches" means the file is not in the indexed folders. The agent does not need to re-check with `find`.
 - **Structured output** with `--json`, and stable exit codes: 0 matches, 1 no matches, 2 error.
 - **No setup per call.** If the Lumos app is not open, `lumos` starts its own background indexer and stops it after 15 idle minutes.
+- **Two ways in.** Agents can run the `lumos` shell command, or call `find_files` through the built-in MCP server (`lumos mcp`).
 
 ## Use cases
 
@@ -101,8 +104,25 @@ lumos find invoice ext:pdf dm:thismonth --json
 
 ## Setting up an agent
 
+First, `make install-cli` puts `lumos` on PATH via `~/.local/bin`. Then pick one of the two routes below.
+
+### MCP (recommended)
+
+`lumos mcp` is a local MCP server with two tools. `find_files` takes the query plus `within`, `kind`, `sort`, `descending`, `limit`, `offset`, `include_hidden`, `details`, and `wait_seconds`. `index_status` reports whether the index is exact and which folders are covered. The agent sees the tools and their syntax without any prompt changes.
+
 ```bash
-make install-cli            # puts lumos on PATH via ~/.local/bin
+claude mcp add lumos -- ~/.local/bin/lumos mcp     # Claude Code
+```
+
+```json
+{ "mcpServers": { "lumos": { "command": "/Users/you/.local/bin/lumos", "args": ["mcp"] } } }
+```
+
+Put the JSON in `~/.cursor/mcp.json` (Cursor) or `~/Library/Application Support/Claude/claude_desktop_config.json` (Claude Desktop). The AI app starts the server as a child process on the user's machine. Like the CLI, it starts the background indexer when the Lumos app is not open.
+
+### Shell command
+
+```bash
 lumos guide >> AGENTS.md    # or CLAUDE.md, or a Cursor rule
 ```
 
@@ -110,7 +130,7 @@ lumos guide >> AGENTS.md    # or CLAUDE.md, or a Cursor rule
 
 Tell the agent to keep `find`, `mdfind`, or its own file search as a fallback for when `lumos` is missing, errors, or the folder is not indexed. Content searches stay with `rg`.
 
-**Sandboxed agents.** Some agents run shell commands in a sandbox that blocks the Lumos socket and the background indexer. `lumos` then reports that no index is running. Allow `lumos` to run outside the sandbox; in Cursor, add it to the command allowlist (Settings → Agents → Auto-Run).
+**Sandboxed agents.** Some agents run shell commands in a sandbox that blocks the Lumos socket and the background indexer. `lumos` then reports that no index is running. Either use the MCP route, which runs outside the shell sandbox, or allow `lumos` to run outside the sandbox. In Cursor, that means adding it to the command allowlist (Settings → Agents → Auto-Run).
 
 ## Limits
 

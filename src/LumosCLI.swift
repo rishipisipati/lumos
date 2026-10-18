@@ -24,6 +24,7 @@ enum CLICommand {
     case status(json: Bool, autoStart: Bool)
     case stop
     case guide
+    case mcp
     case help
 }
 
@@ -81,6 +82,23 @@ func run(_ arguments: [String]) throws -> Int32 {
     case .guide:
         print(guideText)
         return 0
+    case .mcp:
+        return runMCPServer(backend: MCPBackend(
+            find: { find in
+                let response = try request(.find(find), autoStart: true, timeout: find.waitSeconds + 60)
+                guard case .found(let result) = response else {
+                    throw replyError(response)
+                }
+                return result
+            },
+            status: {
+                let response = try request(.status, autoStart: true, timeout: 15)
+                guard case .status(let state) = response else {
+                    throw replyError(response)
+                }
+                return state
+            }
+        ))
     case .status(let json, let autoStart):
         let response = try request(.status, autoStart: autoStart, timeout: 15)
         guard case .status(let state) = response else {
@@ -89,7 +107,7 @@ func run(_ arguments: [String]) throws -> Int32 {
         if json {
             print(try encodeJSON(state))
         } else {
-            print("Lumos index: \(describeIndex(state))")
+            print("Lumos index: \(describeIndex(state, style: .cli))")
             print("Indexed folders: \(state.roots.joined(separator: ", "))")
         }
         return 0
@@ -139,6 +157,8 @@ func parseCommand(_ arguments: [String]) throws -> CLICommand {
         return .status(json: rest.contains("--json"), autoStart: !rest.contains("--no-start"))
     case "stop":
         return .stop
+    case "mcp":
+        return .mcp
     case "find":
         return .find(try parseFind(rest))
     default:
@@ -199,7 +219,11 @@ func parseFind(_ arguments: [String]) throws -> FindOptions {
             sort = .size
             descending = true
         case "--in":
-            within.append(try resolveExistingPath(try value(for: option)))
+            do {
+                within.append(try resolveExistingPath(try value(for: option)))
+            } catch let error as PathResolutionError {
+                throw CLIError.usage("--in \(error.localizedDescription)")
+            }
         case "--files":
             kind = .files
         case "--folders":
@@ -245,17 +269,6 @@ private func integer(_ text: String, option: String) throws -> Int {
         throw CLIError.usage("\(option) needs a whole number")
     }
     return value
-}
-
-/// Absolute, symlink-resolved path, as stored in the index.
-func resolveExistingPath(_ raw: String) throws -> String {
-    let expanded = (raw as NSString).expandingTildeInPath
-    let absolute = expanded.hasPrefix("/") ? expanded : FileManager.default.currentDirectoryPath + "/" + expanded
-    guard let resolved = realpath(absolute, nil) else {
-        throw CLIError.usage("--in \(raw): \(String(cString: strerror(errno)))")
-    }
-    defer { free(resolved) }
-    return String(cString: resolved)
 }
 
 // MARK: - Talking to the index
@@ -344,94 +357,11 @@ func printFind(_ result: FindResult, options: FindOptions) throws {
         )))
     case .count:
         print(result.total)
-        print("# \(describeIndex(result.index))")
+        print("# \(describeIndex(result.index, style: .cli))")
     case .paths, .long:
-        print("# \(describeMatches(result, request: request))")
-        print("# \(describeIndex(result.index))")
-        for entry in result.entries {
-            if options.format == .long {
-                let size = entry.kind == .file ? formatFileSize(entry.size, isDirectory: false) : "-"
-                print("\(formatModifiedDate(entry.modified.timeIntervalSince1970))\t\(size)\t\(entry.kind.rawValue)\t\(entry.path)")
-            } else {
-                print(entry.path)
-            }
+        for line in findLines(result, request: request, style: .cli, details: options.format == .long) {
+            print(line)
         }
-        let shown = result.offset + result.entries.count
-        if shown < result.total {
-            print("# \(formatCount(result.total - shown)) more: rerun with --offset \(shown)")
-        }
-    }
-}
-
-func describeMatches(_ result: FindResult, request: FindRequest) -> String {
-    let subject = request.query.isEmpty ? "" : " for \"\(request.query)\""
-    let scope = request.within.isEmpty ? "" : " in \(request.within.joined(separator: ", "))"
-    let hiddenNote = request.includeHidden ? "" : " (hidden files excluded; add --hidden)"
-    if result.total == 0 {
-        let place = request.within.isEmpty ? "in the indexed folders" : "there"
-        let conclusion = result.index.exact ? ". No such item exists \(place)" : ""
-        return "No matches\(subject)\(scope)\(hiddenNote)\(conclusion)."
-    }
-    let noun = result.total == 1 ? "match" : "matches"
-    var text = "\(formatCount(result.total)) \(noun)\(subject)\(scope), \(describeOrder(request))"
-    if !result.entries.isEmpty {
-        text += ", showing \(formatCount(result.offset + 1))–\(formatCount(result.offset + result.entries.count))"
-    } else if request.limit > 0 {
-        text += ", none at offset \(formatCount(result.offset))"
-    }
-    return text + "."
-}
-
-private func describeOrder(_ request: FindRequest) -> String {
-    switch (request.sort, request.descending) {
-    case (.name, false):
-        return "by name"
-    case (.name, true):
-        return "by name (Z–A)"
-    case (.path, false):
-        return "by folder"
-    case (.path, true):
-        return "by folder (Z–A)"
-    case (.size, false):
-        return "smallest first"
-    case (.size, true):
-        return "largest first"
-    case (.modified, false):
-        return "oldest first"
-    case (.modified, true):
-        return "newest first"
-    }
-}
-
-func describeIndex(_ state: IndexState) -> String {
-    var text: String
-    if state.exact {
-        text = "Index exact"
-    } else {
-        text = "Index NOT exact (\(describePhase(state.phase))): results may be incomplete; retry with --wait 60"
-    }
-    let owner = state.owner == .app ? "Lumos app" : "background indexer"
-    text += " · \(formatCount(state.objects)) objects · \(owner)"
-    if let problem = state.problem {
-        text += " · problem: \(problem)"
-    }
-    return text
-}
-
-private func describePhase(_ phase: String) -> String {
-    switch phase {
-    case "starting":
-        return "loading"
-    case "scanning":
-        return "scanning folders"
-    case "catchingUp":
-        return "catching up on changes made while Lumos was closed"
-    case "updating":
-        return "applying recent changes"
-    case "failed":
-        return "indexing failed"
-    default:
-        return "applying recent changes"
     }
 }
 
@@ -453,6 +383,7 @@ Usage:
   lumos status [--json]
   lumos stop                     stop the background indexer (not the app)
   lumos guide                    instructions to paste into an agent's AGENTS.md
+  lumos mcp                      run as an MCP server over stdio (for Claude, Cursor, and others)
 
 Find options:
   --in PATH        only results inside PATH (repeatable)
@@ -520,7 +451,8 @@ Tips:
 - Fall back to `find`, `mdfind` or your own file search only when `lumos` is
   missing, exits 2, or the folder is not indexed. Use `rg` for file contents.
 - In a sandboxed shell `lumos` may report that no index is running because the
-  sandbox blocks its socket. Run it outside the sandbox.
+  sandbox blocks its socket. Run it outside the sandbox, or use the MCP server
+  (`lumos mcp`, tools `find_files` and `index_status`).
 
 Examples:
     lumos find engagement letter --in ~/Documents/Clients --newest -n 10

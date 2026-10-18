@@ -59,6 +59,12 @@ final class AppStore: ObservableObject {
             UserDefaults.standard.set(debounce.rawValue, forKey: AppStore.debounceKey)
         }
     }
+    @Published var globalShortcutEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(globalShortcutEnabled, forKey: AppStore.globalShortcutKey)
+            applyGlobalShortcut()
+        }
+    }
 
     /// Rows currently selected in the table (owned by the table view).
     var selectedRows = IndexSet()
@@ -82,7 +88,9 @@ final class AppStore: ObservableObject {
     private var statusTimer: Timer?
     private var shownProblem: String?
     private var terminateObserver: NSObjectProtocol?
+    private var hotKey: GlobalHotKey?
     private static let debounceKey = "searchDebounceMs"
+    private static let globalShortcutKey = "globalShortcutEnabled"
 
     init() {
         if let stored = UserDefaults.standard.object(forKey: AppStore.debounceKey) as? Int,
@@ -91,6 +99,44 @@ final class AppStore: ObservableObject {
         } else {
             debounce = .medium
         }
+        if let stored = UserDefaults.standard.object(forKey: AppStore.globalShortcutKey) as? Bool {
+            globalShortcutEnabled = stored
+        }
+    }
+
+    private func applyGlobalShortcut() {
+        if !started || !globalShortcutEnabled {
+            hotKey = nil
+            return
+        }
+        if hotKey != nil {
+            return
+        }
+        do {
+            hotKey = try GlobalHotKey { [weak self] in
+                self?.toggleWindow()
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Option-Space: hide Lumos when it is in front, otherwise bring it forward
+    /// with the search field focused.
+    func toggleWindow() {
+        if NSApp.isActive && NSApp.keyWindow != nil {
+            NSApp.hide(nil)
+            return
+        }
+        NSApp.unhide(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows where window.canBecomeMain {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            window.makeKeyAndOrderFront(nil)
+        }
+        focusSearch()
     }
 
     func start() {
@@ -126,6 +172,7 @@ final class AppStore: ObservableObject {
             self?.queryServer?.stop()
             self?.indexer?.stop()
         }
+        applyGlobalShortcut()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.pollStatus()
         }
@@ -165,8 +212,8 @@ final class AppStore: ObservableObject {
                 return
             }
             let startedAt = DispatchTime.now()
-            let found = indexer.store.readWithLayout { data, layout in
-                (ids: searchIndex(data, query: query, showHidden: showHidden, sortColumn: column, ascending: ascending),
+            let found = indexer.store.readForSearch { data, layout, trigrams in
+                (ids: searchIndex(data, query: query, showHidden: showHidden, sortColumn: column, ascending: ascending, trigrams: trigrams),
                  layout: layout,
                  revision: data.revision)
             }

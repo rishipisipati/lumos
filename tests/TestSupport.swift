@@ -77,7 +77,7 @@ func buildTestIndex(rootPath: String, entries: [TestEntry]) throws -> IndexData 
 }
 
 func searchNames(_ data: IndexData, _ raw: String, showHidden: Bool) -> [String] {
-    return searchIndex(data, query: parseQuery(raw), showHidden: showHidden, sortColumn: .name, ascending: true)
+    return searchIndex(data, query: parseQuery(raw), showHidden: showHidden, sortColumn: .name, ascending: true, trigrams: nil)
         .map { data.nameString($0) }
 }
 

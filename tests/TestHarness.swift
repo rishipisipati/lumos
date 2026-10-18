@@ -74,9 +74,11 @@ struct LumosTests {
             privacySuite(),
             indexDataSuite(),
             searchSuite(),
+            trigramSuite(),
             scannerSuite(),
             snapshotSuite(),
             querySuite(),
+            mcpSuite(),
             specialCharacterSuite()
         ]
         var passed = 0

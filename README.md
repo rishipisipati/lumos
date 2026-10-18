@@ -156,9 +156,6 @@ Lumos does **not** store:
 - frequently visited or recent locations (Finder recents, macOS shared-file lists)
 
 Those stay in RAM for the session and are dropped on quit. Recents that NSOpenPanel might write are cleared. macOS recents databases (`com.apple.sharedfilelist`, `*.sfl*`) are never added to the index.
-
-The old Everything catalog at `~/Library/Application Support/Everything/` is unused.
-
 ## License
 
 MIT. See `LICENSE`.
